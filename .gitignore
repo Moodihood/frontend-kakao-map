@@ -1,0 +1,11 @@
+# 빌드된 HTML 파일 (API 키가 주입된 파일)
+# 주의: 이 파일들은 실제 API 키를 포함하므로 git에 커밋하면 안 됩니다
+index.html
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+.vercel

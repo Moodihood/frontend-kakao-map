@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{KAKAO_JAVASCRIPT_KEY}}&autoload=false&libraries=services"></script>
+  <style>
+    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    // WebView → RN 로그 브릿지
+    (function(){
+      if (window.ReactNativeWebView) {
+        const log = (tag, data) => {
+          try { window.ReactNativeWebView.postMessage(tag + ': ' + JSON.stringify(data)); }
+          catch(e){ window.ReactNativeWebView.postMessage(tag + ': ' + String(data)); }
+        };
+        window._rnlog = log;
+        log('[WV] origin', { origin: window.location.origin });
+      }
+    })();
+
+    // === JS 쪽 한국 범위 가드 ===
+    function isKorea(lat, lng) {
+      return lat >= 33 && lat <= 39 && lng >= 124 && lng <= 132;
+    }
+
+    // URL 파라미터에서 초기 좌표 읽기
+    const urlParams = new URLSearchParams(window.location.search);
+    const INIT_LAT = parseFloat(urlParams.get('lat')) || 37.5665;
+    const INIT_LNG = parseFloat(urlParams.get('lng')) || 126.978;
+    const SHOW_CENTER_MARKER = urlParams.get('showCenter') !== 'false';
+
+    // 전역 map, markers 참조 - window 객체에 할당
+    window.map = null;
+    window.placeMarker = null;
+    window.currentLocationMarker = null;
+    window.placeMarkers = []; // 장소 마커들 배열
+
+    window.makeSafeLatLng = function makeSafeLatLng(lat, lng) {
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        // 개발 환경에서는 에뮬레이터 좌표를 서울로 변환하여 표시
+        if (!isKorea(lat, lng)) {
+          window._rnlog && _rnlog('[WV] 한국 범위 밖 좌표 -> 서울로 변환', { original: { lat, lng }, converted: { lat: 37.5665, lng: 126.9780 } });
+          return new kakao.maps.LatLng(37.5665, 126.9780);
+        }
+        return new kakao.maps.LatLng(lat, lng);
+      }
+      return new kakao.maps.LatLng(37.5665, 126.9780);
+    }
+
+    // 카테고리별 마커 이미지 생성 함수 - window 객체에 할당
+    window.createCategoryMarkerImage = function createCategoryMarkerImage(category, isSelected = false) {
+      let svgContent = '';
+      
+      // 카페 카테고리 마커 SVG
+      if (category === '카페' || category.includes('카페') || category.includes('커피')) {
+        svgContent = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_2414_43289)">
+<g opacity="0.16" filter="url(#filter0_f_2414_43289)">
+<ellipse cx="20" cy="36.875" rx="5" ry="1.875" fill="#171719"/>
+</g>
+<g filter="url(#filter1_d_2414_43289)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M20 2.14307C28.2843 2.14307 35 8.70529 35 16.8002C35 23.0069 31.0519 28.3126 25.4757 30.4501L20.8542 36.0105C20.7578 36.1397 20.6299 36.2451 20.4812 36.318C20.3325 36.3908 20.1674 36.4288 19.9998 36.4288C19.8323 36.4288 19.6672 36.3908 19.5185 36.318C19.3698 36.2451 19.2418 36.1397 19.1455 36.0105L14.5238 30.4499C8.94793 28.3123 5 23.0068 5 16.8002C5 8.70529 11.7157 2.14307 20 2.14307Z" fill="white"/>
+</g>
+<path opacity="0.16" d="M32.5 16.875C32.5 9.97144 26.9036 4.375 20 4.375C13.0964 4.375 7.5 9.97144 7.5 16.875C7.5 23.7786 13.0964 29.375 20 29.375C26.9036 29.375 32.5 23.7786 32.5 16.875Z" fill="#F55A00"/>
+<path d="M25 13.875H14C13.8674 13.875 13.7402 13.9277 13.6464 14.0214C13.5527 14.1152 13.5 14.2424 13.5 14.375V17.375C13.5015 18.2262 13.6835 19.0675 14.0341 19.8432C14.3847 20.6189 14.8958 21.3114 15.5338 21.875H14C13.8674 21.875 13.7402 21.9277 13.6464 22.0214C13.5527 22.1152 13.5 22.2424 13.5 22.375C13.5 22.5076 13.5527 22.6348 13.6464 22.7286C13.7402 22.8223 13.8674 22.875 14 22.875H25C25.1326 22.875 25.2598 22.8223 25.3536 22.7286C25.4473 22.6348 25.5 22.5076 25.5 22.375C25.5 22.2424 25.4473 22.1152 25.3536 22.0214C25.2598 21.9277 25.1326 21.875 25 21.875H23.4663C24.232 21.1963 24.8127 20.3341 25.1538 19.3694C25.7888 19.3302 26.3851 19.0504 26.821 18.587C27.2569 18.1235 27.4998 17.5113 27.5 16.875V16.375C27.5 15.712 27.2366 15.0761 26.7678 14.6072C26.2989 14.1384 25.663 13.875 25 13.875ZM26.5 16.875C26.4998 17.1985 26.395 17.5132 26.2013 17.7723C26.0075 18.0314 25.7352 18.2208 25.425 18.3125C25.4745 18.0025 25.4996 17.689 25.5 17.375V14.9612C25.7924 15.0646 26.0455 15.2561 26.2246 15.5092C26.4037 15.7624 26.4999 16.0649 26.5 16.375V16.875ZM19 12.375V10.375C19 10.2424 19.0527 10.1152 19.1464 10.0214C19.2402 9.92768 19.3674 9.875 19.5 9.875C19.6326 9.875 19.7598 9.92768 19.8536 10.0214C19.9473 10.1152 20 10.2424 20 10.375V12.375C20 12.5076 19.9473 12.6348 19.8536 12.7286C19.7598 12.8223 19.6326 12.875 19.5 12.875C19.3674 12.875 19.2402 12.8223 19.1464 12.7286C19.0527 12.6348 19 12.5076 19 12.375ZM21 12.375V10.375C21 10.2424 21.0527 10.1152 21.1464 10.0214C21.2402 9.92768 21.3674 9.875 21.5 9.875C21.6326 9.875 21.7598 9.92768 21.8536 10.0214C21.9473 10.1152 22 10.2424 22 10.375V12.375C22 12.5076 21.9473 12.6348 21.8536 12.7286C21.7598 12.8223 21.6326 12.875 21.5 12.875C21.3674 12.875 21.2402 12.8223 21.1464 12.7286C21.0527 12.6348 21 12.5076 21 12.375ZM17 12.375V10.375C17 10.2424 17.0527 10.1152 17.1464 10.0214C17.2402 9.92768 17.3674 9.875 17.5 9.875C17.6326 9.875 17.7598 9.92768 17.8536 10.0214C17.9473 10.1152 18 10.2424 18 10.375V12.375C18 12.5076 17.9473 12.6348 17.8536 12.7286C17.7598 12.8223 17.6326 12.875 17.5 12.875C17.3674 12.875 17.2402 12.8223 17.1464 12.7286C17.0527 12.6348 17 12.5076 17 12.375Z" fill="#F55A00"/>
+</g>
+<defs>
+<filter id="filter0_f_2414_43289" x="13" y="33" width="14" height="7.75" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_2414_43289"/>
+</filter>
+<filter id="filter1_d_2414_43289" x="1.25" y="-0.981934" width="37.5" height="41.7856" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="0.625"/>
+<feGaussianBlur stdDeviation="1.875"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_2414_43289"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2414_43289" result="shape"/>
+</filter>
+<clipPath id="clip0_2414_43289">
+<rect width="40" height="40" fill="white"/>
+</clipPath>
+</defs>
+</svg>`;
+      }
+      // 음식점 카테고리 마커 SVG
+      else if (category === '음식점' || category.includes('음식') || category.includes('식당')) {
+        svgContent = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_2414_43480)">
+<g opacity="0.16" filter="url(#filter0_f_2414_43480)">
+<ellipse cx="20" cy="36.875" rx="5" ry="1.875" fill="#171719"/>
+</g>
+<g filter="url(#filter1_d_2414_43480)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M20 2.14307C28.2843 2.14307 35 8.70529 35 16.8002C35 23.0069 31.0519 28.3126 25.4757 30.4501L20.8542 36.0105C20.7578 36.1397 20.6299 36.2451 20.4812 36.318C20.3325 36.3908 20.1674 36.4288 19.9998 36.4288C19.8323 36.4288 19.6672 36.3908 19.5185 36.318C19.3698 36.2451 19.2418 36.1397 19.1455 36.0105L14.5238 30.4499C8.94793 28.3123 5 23.0068 5 16.8002C5 8.70529 11.7157 2.14307 20 2.14307Z" fill="white"/>
+</g>
+<path opacity="0.16" d="M32.5 16.875C32.5 9.97144 26.9036 4.375 20 4.375C13.0964 4.375 7.5 9.97144 7.5 16.875C7.5 23.7786 13.0964 29.375 20 29.375C26.9036 29.375 32.5 23.7786 32.5 16.875Z" fill="#D17600"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M17.8798 15.417C18.7619 14.9829 19.3819 13.9557 19.3819 12.7575C19.3819 11.1669 18.2891 9.87736 16.941 9.87736C15.5929 9.87736 14.5 11.1669 14.5 12.7575C14.5 13.9557 15.12 14.9829 16.0021 15.417V23.2126C16.0021 23.4671 16.2263 23.6734 16.5028 23.6734H17.3791C17.6556 23.6734 17.8798 23.4671 17.8798 23.2126V15.417Z" fill="#FCCD40"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M22.7461 10.1478C22.7461 10.0103 22.8523 9.89352 23.0014 9.88452C23.0154 9.88367 23.0295 9.88289 23.0434 9.88219V9.87737C23.0689 9.87737 23.0981 9.87783 23.1294 9.87875C23.1608 9.87783 23.19 9.87737 23.2155 9.87737V9.88219C23.2294 9.88289 23.2435 9.88367 23.2575 9.88452C23.4066 9.89352 23.5128 10.0103 23.5128 10.1478V12.5703C23.5128 12.7692 23.6879 12.9303 23.904 12.9303C24.12 12.9303 24.2952 12.7692 24.2952 12.5703V10.1638C24.2952 10.0047 24.4367 9.85505 24.6079 9.87718C24.7242 9.89222 24.802 9.94873 24.9211 10.1366C25.2497 10.6551 25.5 11.8017 25.5 12.4839C25.5 13.6404 24.9141 14.5996 24.0761 15.0371V23.2126C24.0761 23.4671 23.8519 23.6734 23.5754 23.6734H22.6991C22.4226 23.6734 22.1984 23.4671 22.1984 23.2126V15.0452C21.3521 14.6115 20.7589 13.6476 20.7589 12.4839C20.7589 11.8017 21.0092 10.6551 21.3378 10.1366C21.4569 9.94873 21.5347 9.89222 21.651 9.87718C21.8222 9.85505 21.9637 10.0047 21.9637 10.1638V12.5703C21.9637 12.7692 22.1389 12.9303 22.3549 12.9303C22.5709 12.9303 22.7461 12.7692 22.7461 12.5703V10.1478Z" fill="#FCCD40"/>
+<path d="M15.7205 17.7114C15.7205 17.5842 15.8326 17.481 15.9708 17.481H17.9111C18.0494 17.481 18.1615 17.5842 18.1615 17.7114V23.6446C18.1615 23.7718 18.0494 23.875 17.9111 23.875H15.9708C15.8326 23.875 15.7205 23.7718 15.7205 23.6446V17.7114Z" fill="#B79632"/>
+<path d="M21.9168 17.7114C21.9168 17.5842 22.0289 17.481 22.1671 17.481H24.1074C24.2457 17.481 24.3578 17.5842 24.3578 17.7114V23.6446C24.3578 23.7718 24.2457 23.875 24.1074 23.875H22.1671C22.0289 23.875 21.9168 23.7718 21.9168 23.6446V17.7114Z" fill="#B79632"/>
+</g>
+<defs>
+<filter id="filter0_f_2414_43480" x="13" y="33" width="14" height="7.75" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_2414_43480"/>
+</filter>
+<filter id="filter1_d_2414_43480" x="1.25" y="-0.981934" width="37.5" height="41.7856" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="0.625"/>
+<feGaussianBlur stdDeviation="1.875"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_2414_43480"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2414_43480" result="shape"/>
+</filter>
+<clipPath id="clip0_2414_43480">
+<rect width="40" height="40" fill="white"/>
+</clipPath>
+</defs>
+</svg>`;
+      }
+      // 기본 마커 (기타 카테고리용)
+      else {
+        const color = '#0066FF';
+        svgContent = `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g filter="url(#filter0_f_1575_18873)">
+<ellipse cx="24" cy="43" rx="6" ry="2" fill="#171719" fill-opacity="0.16"/>
+</g>
+<path d="M24 4.82227C32.1394 4.82227 39.5 11.0541 39.5 20.7227C39.4999 23.7733 38.3237 27.1381 35.9111 30.8311C33.4996 34.5223 29.8706 38.513 25.0117 42.8047C24.4398 43.3012 23.5797 43.3013 23.0078 42.8047C18.1389 38.513 14.5048 34.5223 12.0908 30.8311C9.67583 27.1382 8.5001 23.7732 8.5 20.7227C8.5 11.0541 15.8606 4.82227 24 4.82227ZM24 15.8223C21.5239 15.8223 19.5 17.8461 19.5 20.3223C19.5 22.7984 21.5239 24.8223 24 24.8223C26.4761 24.8223 28.5 22.7984 28.5 20.3223C28.5 17.8461 26.4761 15.8223 24 15.8223Z" fill="${color}" stroke="white"/>
+<defs>
+<filter id="filter0_f_1575_18873" x="16" y="39" width="16" height="8" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1575_18873"/>
+</filter>
+</defs>
+</svg>`;
+      }
+      
+      const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
+      
+      // 기본 크기
+      let baseWidth, baseHeight;
+      if (category === '카페' || category.includes('카페') || category.includes('커피') || 
+          category === '음식점' || category.includes('음식') || category.includes('식당')) {
+        baseWidth = 40;
+        baseHeight = 40;
+      } else {
+        baseWidth = 48;
+        baseHeight = 48;
+      }
+      
+      // 선택된 마커는 3배 크기
+      const finalWidth = isSelected ? baseWidth * 2 : baseWidth;
+      const finalHeight = isSelected ? baseHeight * 2 : baseHeight;
+      
+      const size = new kakao.maps.Size(finalWidth, finalHeight);
+      return new kakao.maps.MarkerImage(svgUrl, size);
+    }
+
+    // 커스텀 마커 이미지 생성 함수 - window 객체에 할당 (현재 위치용)
+    window.createCustomMarkerImage = function createCustomMarkerImage(isCurrentLocation = false) {
+      if (isCurrentLocation) {
+        // 현위치 마커 (20x20 크기의 빨간 원)
+        const svgContent = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g filter="url(#filter0_d_1575_19092)">
+<circle cx="12" cy="10" r="8" fill="#FF4242"/>
+<circle cx="12" cy="10" r="7" stroke="white" stroke-width="2"/>
+</g>
+<defs>
+<filter id="filter0_d_1575_19092" x="0" y="0" width="24" height="24" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="2"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.0901961 0 0 0 0 0.0901961 0 0 0 0 0.0980392 0 0 0 0.12 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1575_19092"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2414_43480" result="shape"/>
+</filter>
+</defs>
+</svg>`;
+        const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
+        return new kakao.maps.MarkerImage(svgUrl, new kakao.maps.Size(20, 20));
+      }
+    }
+
+    // 장소 마커들 업데이트 함수
+    window.updatePlaceMarkers = function updatePlaceMarkers(markers) {
+      // 기존 장소 마커들 제거
+      window.placeMarkers.forEach(marker => marker.setMap(null));
+      window.placeMarkers = [];
+      
+      // 새 마커들 생성 및 추가
+      markers.forEach(markerData => {
+        const position = window.makeSafeLatLng(markerData.latitude, markerData.longitude);
+        const markerImage = window.createCategoryMarkerImage(markerData.category, markerData.isSelected);
+        
+        const marker = new kakao.maps.Marker({
+          position: position,
+          image: markerImage
+        });
+        
+        // 마커 클릭 이벤트 리스너 추가
+        kakao.maps.event.addListener(marker, 'click', function() {
+          window._rnlog && _rnlog('[WV] 마커 클릭됨', { id: markerData.id, name: markerData.name });
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'markerClick',
+              markerId: markerData.id
+            }));
+          }
+        });
+        
+        marker.setMap(window.map);
+        window.placeMarkers.push(marker);
+      });
+      
+      window._rnlog && _rnlog('[WV] 장소 마커들 업데이트 완료', { count: markers.length });
+    }
+
+    // 바텀시트 높이를 고려한 자동 줌 조정 함수
+    window.adjustMapBounds = function adjustMapBounds(bottomSheetHeight) {
+      if (!window.map || window.placeMarkers.length === 0) return;
+      
+      try {
+        // 모든 마커의 위치를 포함하는 bounds 계산
+        const bounds = new kakao.maps.LatLngBounds();
+        window.placeMarkers.forEach(marker => {
+          bounds.extend(marker.getPosition());
+        });
+        
+        // 바텀시트 높이를 고려한 여백 계산
+        const mapSize = window.map.getSize();
+        const bottomMargin = Math.floor(mapSize.height * bottomSheetHeight);
+        
+        // bounds에 여백 추가하여 setBounds 실행
+        window.map.setBounds(bounds, bottomMargin + 50, 50, 50, 50); // bottom, left, top, right
+        
+        window._rnlog && _rnlog('[WV] 자동 줌 조정 완료', { 
+          bottomSheetHeight, 
+          bottomMargin, 
+          markerCount: window.placeMarkers.length 
+        });
+      } catch (e) {
+        window._rnlog && _rnlog('[WV] 자동 줌 조정 에러', e.message);
+      }
+    }
+
+    kakao.maps.load(function() {
+      try {
+        window._rnlog && _rnlog('[WV] kakao.maps.load called', { INIT_LAT, INIT_LNG });
+
+        const mapContainer = document.getElementById('map');
+        const center = window.makeSafeLatLng(INIT_LAT, INIT_LNG);
+        const mapOption = { center, level: 3 };
+
+        window.map = new kakao.maps.Map(mapContainer, mapOption);
+        
+        // showCenterMarker가 true일 때만 중심점 마커 생성 (파란색)
+        if (SHOW_CENTER_MARKER) {
+          const customMarkerImage = window.createCustomMarkerImage(false);
+          window.placeMarker = new kakao.maps.Marker({ 
+            position: center,
+            image: customMarkerImage
+          });
+          window.placeMarker.setMap(window.map);
+        }
+
+        window._rnlog && _rnlog('[WV] 지도 및 마커 window 객체에 할당 완료');
+
+        // 지도 중심 좌표 변경 이벤트 리스너 추가
+        kakao.maps.event.addListener(window.map, 'center_changed', function() {
+          const center = window.map.getCenter();
+          const lat = center.getLat();
+          const lng = center.getLng();
+          window._rnlog && _rnlog('[WV] CENTER_CHANGED', { lat, lng });
+          // React Native로 중심 좌표 변경 알림
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'centerChanged',
+              lat: lat,
+              lng: lng
+            }));
+          }
+        });
+
+        kakao.maps.event.addListener(window.map, 'tilesloaded', function() {
+          window._rnlog && _rnlog('[WV] TILES_LOADED', true);
+        });
+
+        setTimeout(() => {
+          window.map.relayout();
+          window._rnlog && _rnlog('[WV] relayout', true);
+        }, 100);
+
+        setTimeout(() => {
+          const tiles = document.querySelectorAll('img');
+          const count = Array.from(tiles).filter(img => /kakao|daum/.test(img.src)).length;
+          window._rnlog && _rnlog('[WV] tile images count', count);
+        }, 5000);
+
+      } catch (e) {
+        window._rnlog && _rnlog('[WV] MAP_INIT_ERROR', { message: e.message, stack: e.stack });
+      }
+    });
+
+    // RN → WV 메시지 핸들러
+    window.addEventListener('message', (evt) => {
+      try {
+        window._rnlog && _rnlog('[WV] 메시지 받음', evt.data);
+        const msg = JSON.parse(evt.data);
+        window._rnlog && _rnlog('[WV] 파싱된 메시지', msg);
+        
+        // 장소 위치 변경
+        if (msg?.type === 'setCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          window._rnlog && _rnlog('[WV] setCenter 처리 시작');
+          const c = window.makeSafeLatLng(msg.lat, msg.lng);
+          window.map.setCenter(c);
+          
+          // 기존 장소 마커 제거 후 새로 생성
+          if (window.placeMarker) window.placeMarker.setMap(null);
+          const customMarkerImage = window.createCustomMarkerImage(false);
+          window.placeMarker = new kakao.maps.Marker({ 
+            position: c,
+            image: customMarkerImage
+          });
+          window.placeMarker.setMap(window.map);
+          
+          window._rnlog && _rnlog('[WV] setCenter 완료', { lat: msg.lat, lng: msg.lng });
+        }
+        
+        // 현재 위치 마커 표시
+        if (msg?.type === 'setCurrentLocation') {
+          window._rnlog && _rnlog('[WV] setCurrentLocation 메시지 확인', {
+            type: msg.type,
+            lat: msg.lat,
+            lng: msg.lng,
+            latFinite: Number.isFinite(msg?.lat),
+            lngFinite: Number.isFinite(msg?.lng),
+            mapExists: !!window.map
+          });
+          
+          if (Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+            window._rnlog && _rnlog('[WV] setCurrentLocation 처리 시작');
+            const c = window.makeSafeLatLng(msg.lat, msg.lng);
+            window.map.setCenter(c);
+            
+            // 기존 현재 위치 마커 제거 후 새로 생성 (빨간색)
+            if (window.currentLocationMarker) {
+              window.currentLocationMarker.setMap(null);
+              window._rnlog && _rnlog('[WV] 기존 현위치 마커 제거됨');
+            }
+            const redMarkerImage = window.createCustomMarkerImage(true);
+            window.currentLocationMarker = new kakao.maps.Marker({ 
+              position: c,
+              image: redMarkerImage
+            });
+            window.currentLocationMarker.setMap(window.map);
+            
+            window._rnlog && _rnlog('[WV] setCurrentLocation 완료', { lat: msg.lat, lng: msg.lng });
+          } else {
+            window._rnlog && _rnlog('[WV] setCurrentLocation 조건 실패');
+          }
+        }
+
+        // 장소 마커들 업데이트
+        if (msg?.type === 'updateMarkers' && msg?.markers) {
+          window.updatePlaceMarkers(msg.markers);
+          
+          // 바텀시트 높이 정보가 있으면 자동 줌 조정 실행
+          if (msg.bottomSheetHeight) {
+            setTimeout(() => {
+              if (window.adjustMapBounds) {
+                window.adjustMapBounds(msg.bottomSheetHeight);
+              }
+            }, 500);
+          }
+        }
+
+        // 바텀시트 높이 변경에 따른 자동 줌 조정
+        if (msg?.type === 'adjustBounds' && msg?.bottomSheetHeight) {
+          setTimeout(() => {
+            if (window.adjustMapBounds) {
+              window.adjustMapBounds(msg.bottomSheetHeight);
+            }
+          }, 300);
+        }
+      } catch(e) {
+        window._rnlog && _rnlog('[WV] 메시지 처리 에러', e.message);
+      }
+    });
+  </script>
+</body>
+</html>
