@@ -280,8 +280,17 @@
         const mapWidth = mapContainer.clientWidth;
         const bottomMargin = Math.floor(mapHeight * bottomSheetHeight);
         
-        // bounds에 여백 추가하여 setBounds 실행
-        window.map.setBounds(bounds, bottomMargin + 50, 50, 50, 50); // bottom, left, top, right
+        // bounds에 여백 추가하여 setBounds 실행 (여백을 줄여서 더 확대)
+        window.map.setBounds(bounds, bottomMargin + 30, 30, 30, 30); // bottom, left, top, right
+        
+        // 줌 레벨이 너무 멀어지지 않도록 최대 줌 아웃 제한
+        setTimeout(() => {
+          const currentLevel = window.map.getLevel();
+          if (currentLevel > 6) {
+            window.map.setLevel(6); // 최대 줌 아웃 레벨 제한
+            console.log('[WV] 줌 레벨 제한 적용:', { beforeLevel: currentLevel, afterLevel: 6 });
+          }
+        }, 100);
         
         window._rnlog && _rnlog('[WV] 자동 줌 조정 완료', { 
           bottomSheetHeight, 
