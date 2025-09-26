@@ -274,9 +274,11 @@
           bounds.extend(marker.getPosition());
         });
         
-        // 바텀시트 높이를 고려한 여백 계산
-        const mapSize = window.map.getSize();
-        const bottomMargin = Math.floor(mapSize.height * bottomSheetHeight);
+        // 바텀시트 높이를 고려한 여백 계산 - DOM 요소에서 직접 가져오기
+        const mapContainer = document.getElementById('map');
+        const mapHeight = mapContainer.clientHeight;
+        const mapWidth = mapContainer.clientWidth;
+        const bottomMargin = Math.floor(mapHeight * bottomSheetHeight);
         
         // bounds에 여백 추가하여 setBounds 실행
         window.map.setBounds(bounds, bottomMargin + 50, 50, 50, 50); // bottom, left, top, right
