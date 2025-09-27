@@ -465,6 +465,19 @@
           window.updateCurrentLocationMarker(msg.lat, msg.lng);
         }
 
+        // 지도 줌 레벨 설정
+        if (msg?.type === 'setZoomLevel' && Number.isFinite(msg?.level) && window.map) {
+          window.map.setLevel(msg.level);
+          window._rnlog && _rnlog('[WV] 줌 레벨 설정 완료', { level: msg.level });
+        }
+
+        // 지도 중심 이동 (애니메이션 포함)
+        if (msg?.type === 'panToLocation' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          const position = window.makeSafeLatLng(msg.lat, msg.lng);
+          window.map.panTo(position);
+          window._rnlog && _rnlog('[WV] 지도 중심 이동 완료', { lat: msg.lat, lng: msg.lng });
+        }
+
         // 장소 마커들 업데이트
         if (msg?.type === 'updateMarkers' && msg?.markers) {
           window.updatePlaceMarkers(msg.markers);
@@ -486,6 +499,194 @@
               window.adjustMapBounds(msg.bottomSheetHeight);
             }
           }, 300);
+        }
+
+        // 지도 중심 설정 + 선택적 중심 마커 표시 (성능 최적화)
+        if (msg?.type === 'setMapCenterWithMarker' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          try {
+            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 처리 시작', {
+              lat: msg.lat,
+              lng: msg.lng,
+              showCenterMarker: msg.showCenterMarker
+            });
+
+            const c = window.makeSafeLatLng(msg.lat, msg.lng);
+            window.map.setCenter(c);
+            
+            // showCenterMarker가 true일 때만 중심점 마커 생성
+            if (msg.showCenterMarker) {
+              if (window.placeMarker) window.placeMarker.setMap(null);
+              const customMarkerImage = window.createCustomMarkerImage(false);
+              window.placeMarker = new kakao.maps.Marker({ 
+                position: c,
+                image: customMarkerImage
+              });
+              window.placeMarker.setMap(window.map);
+              window._rnlog && _rnlog('[WV] 중심 마커 생성됨');
+            } else {
+              // 중심 마커 숨김
+              if (window.placeMarker) {
+                window.placeMarker.setMap(null);
+                window._rnlog && _rnlog('[WV] 중심 마커 제거됨');
+              }
+            }
+            
+            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 완료');
+          } catch(e) {
+            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 에러', e.message);
+          }
+        }
+
+        // 장소 마커 업데이트 + 자동 줌 조정 (성능 최적화)
+        if (msg?.type === 'updatePlaceMarkersWithAutoZoom' && Array.isArray(msg?.markers) && window.map) {
+          try {
+            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 처리 시작', {
+              markerCount: msg.markers.length,
+              bottomSheetHeight: msg.bottomSheetHeight
+            });
+
+            // 장소 마커 업데이트
+            if (window.updatePlaceMarkers) {
+              window.updatePlaceMarkers(msg.markers);
+            }
+            
+            // 마커 업데이트 후 자동 줌 조정 실행
+            if (msg.markers.length > 0 && msg.bottomSheetHeight !== undefined) {
+              window._rnlog && _rnlog('[WV] 자동 줌 조정 시도 시작', { 
+                markerCount: msg.markers.length, 
+                bottomSheetHeight: msg.bottomSheetHeight,
+                adjustMapBoundsExists: !!window.adjustMapBounds
+              });
+              
+              setTimeout(() => {
+                if (window.adjustMapBounds) {
+                  window._rnlog && _rnlog('[WV] adjustMapBounds 함수 호출 실행');
+                  window.adjustMapBounds(msg.bottomSheetHeight);
+                } else {
+                  window._rnlog && _rnlog('[WV] adjustMapBounds 함수가 존재하지 않음');
+                }
+              }, 500);
+            } else {
+              window._rnlog && _rnlog('[WV] 마커가 없거나 bottomSheetHeight가 없어서 자동 줌 조정 스킵');
+            }
+            
+            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 완료');
+          } catch(e) {
+            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 에러', e.message);
+          }
+        }
+
+        // 바텀시트 높이 조정 + 센터 보정 (성능 최적화)
+        if (msg?.type === 'adjustBottomSheetWithCenterCorrection' && window.map) {
+          try {
+            const bottomSheetHeight = msg.bottomSheetHeight;
+            const previousHeight = msg.previousHeight;
+            const shouldApplyCenterCorrection = msg.shouldApplyCenterCorrection;
+            const markerCount = msg.markerCount || 0;
+            
+            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 처리 시작', {
+              current: bottomSheetHeight,
+              previous: previousHeight,
+              shouldApplyCenterCorrection,
+              markerCount
+            });
+            
+            const screenHeight = window.innerHeight;
+            
+            // 기준 센터 설정 (45% 일 때의 센터) - 45%일 때만
+            if (Math.abs(bottomSheetHeight - 0.45) < 0.01) {
+              window.baseCenter = window.map.getCenter();
+              window._rnlog && _rnlog('[WV] 기준 센터 설정/갱신', {
+                lat: window.baseCenter.getLat(),
+                lng: window.baseCenter.getLng(),
+                bottomSheetHeight: bottomSheetHeight
+              });
+            }
+            
+            // 45% ↔ 최소 높이 간 이동에서만 센터 보정 적용
+            if (shouldApplyCenterCorrection && window.baseCenter) {
+              const currentMapCenter = window.map.getCenter();
+              
+              if (Math.abs(bottomSheetHeight - 0.2) < 0.01) {
+                // 45% → 20%: 지도 높이가 늘어났으므로 현재 센터를 새로운 지도 높이의 가운데로 이동
+                const mapHeightAt45 = screenHeight * (1 - 0.45);
+                const mapHeightAt20 = screenHeight * (1 - 0.2);
+                const heightIncrease = mapHeightAt20 - mapHeightAt45;
+                const centerOffsetY = heightIncrease * 0.5;
+                
+                window._rnlog && _rnlog('[WV] 45% → 20% 센터 보정 계산', {
+                  mapHeightAt45,
+                  mapHeightAt20,
+                  heightIncrease,
+                  centerOffsetY
+                });
+                
+                const projection = window.map.getProjection();
+                const currentPoint = projection.pointFromCoords(currentMapCenter);
+                const adjustedPoint = { x: currentPoint.x, y: currentPoint.y + centerOffsetY };
+                const newCenter = projection.coordsFromPoint(adjustedPoint);
+                window.map.panTo(newCenter);
+                
+                window._rnlog && _rnlog('[WV] 45% → 20% 센터 보정 적용', {
+                  currentCenter: { lat: currentMapCenter.getLat(), lng: currentMapCenter.getLng() },
+                  newCenter: { lat: newCenter.getLat(), lng: newCenter.getLng() },
+                  centerOffsetY
+                });
+                
+              } else if (Math.abs(bottomSheetHeight - 0.45) < 0.01) {
+                // 20% → 45%: 지도 높이가 줄어들었으므로 현재 센터를 새로운 지도 높이의 가운데로 이동
+                const mapHeightAt20 = screenHeight * (1 - 0.2);
+                const mapHeightAt45 = screenHeight * (1 - 0.45);
+                const heightDecrease = mapHeightAt20 - mapHeightAt45;
+                const centerOffsetY = -heightDecrease * 0.5;
+                
+                window._rnlog && _rnlog('[WV] 20% → 45% 센터 보정 계산', {
+                  mapHeightAt20,
+                  mapHeightAt45,
+                  heightDecrease,
+                  centerOffsetY
+                });
+                
+                const projection = window.map.getProjection();
+                const currentPoint = projection.pointFromCoords(currentMapCenter);
+                const adjustedPoint = { x: currentPoint.x, y: currentPoint.y + centerOffsetY };
+                const newCenter = projection.coordsFromPoint(adjustedPoint);
+                window.map.panTo(newCenter);
+                
+                window._rnlog && _rnlog('[WV] 20% → 45% 센터 보정 적용', {
+                  currentCenter: { lat: currentMapCenter.getLat(), lng: currentMapCenter.getLng() },
+                  newCenter: { lat: newCenter.getLat(), lng: newCenter.getLng() },
+                  centerOffsetY
+                });
+              }
+            } else if (!shouldApplyCenterCorrection) {
+              window._rnlog && _rnlog('[WV] 센터 보정 스킵 - 45% ↔ 최소 높이 간 이동이 아님');
+            }
+            
+            // 장소 마커가 있을 때만 자동 줌 조정 (75% 이상에서는 스킵)
+            if (window.adjustMapBounds && markerCount > 0 && bottomSheetHeight < 0.75) {
+              setTimeout(() => {
+                window.adjustMapBounds(bottomSheetHeight);
+              }, 300);
+            }
+            
+            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 완료');
+          } catch(e) {
+            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 에러', e.message);
+          }
+        }
+
+        // 기준 센터 업데이트 (성능 최적화)
+        if (msg?.type === 'updateBaseCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          try {
+            window.baseCenter = new kakao.maps.LatLng(msg.lat, msg.lng);
+            window._rnlog && _rnlog('[WV] 기준 센터 업데이트', {
+              lat: msg.lat,
+              lng: msg.lng
+            });
+          } catch(e) {
+            window._rnlog && _rnlog('[WV] updateBaseCenter 에러', e.message);
+          }
         }
       } catch(e) {
         window._rnlog && _rnlog('[WV] 메시지 처리 에러', e.message);
