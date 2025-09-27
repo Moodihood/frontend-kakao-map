@@ -200,17 +200,10 @@
       const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
       
       // 기본 크기
-      let baseWidth, baseHeight;
-      if (category === '카페' || category.includes('카페') || category.includes('커피') || 
-          category === '음식점' || category.includes('음식') || category.includes('식당')) {
-        baseWidth = 40;
-        baseHeight = 40;
-      } else {
-        baseWidth = 48;
-        baseHeight = 48;
-      }
-      
-      // 선택된 마커는 3배 크기
+      const baseWidth = 40;
+      const baseHeight = 40;
+
+      // 선택된 마커는 2배 크기
       const finalWidth = isSelected ? baseWidth * 2 : baseWidth;
       const finalHeight = isSelected ? baseHeight * 2 : baseHeight;
       
@@ -323,7 +316,7 @@
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'markerClick',
-                markerId: markerData.id
+                markerId: markerData.kakaoId
               }));
             }
           });
