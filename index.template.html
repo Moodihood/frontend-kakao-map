@@ -229,6 +229,44 @@
       }
     }
 
+    // 현위치 마커 이미지 생성 함수
+    window.createCurrentLocationMarkerImage = function createCurrentLocationMarkerImage() {
+      const svgContent = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" fill="#007AFF" stroke="white" stroke-width="4"/>
+        <circle cx="16" cy="16" r="6" fill="white"/>
+      </svg>`;
+      
+      const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
+      const imageSize = new kakao.maps.Size(32, 32);
+      const imageOption = {offset: new kakao.maps.Point(16, 16)};
+      
+      return new kakao.maps.MarkerImage(svgUrl, imageSize, imageOption);
+    }
+
+    // 현위치 마커 업데이트 함수
+    window.updateCurrentLocationMarker = function updateCurrentLocationMarker(latitude, longitude) {
+      // 기존 현위치 마커 제거
+      if (window.currentLocationMarker) {
+        window.currentLocationMarker.setMap(null);
+        window.currentLocationMarker = null;
+      }
+      
+      if (latitude && longitude) {
+        const position = window.makeSafeLatLng(latitude, longitude);
+        const markerImage = window.createCurrentLocationMarkerImage();
+        
+        window.currentLocationMarker = new kakao.maps.Marker({
+          position: position,
+          image: markerImage,
+          title: '현재 위치',
+          zIndex: 100 // 다른 마커들보다 위에 표시
+        });
+        
+        window.currentLocationMarker.setMap(window.map);
+        window._rnlog && _rnlog('[WV] 현위치 마커 업데이트 완료', { latitude, longitude });
+      }
+    }
+
     // 장소 마커들 업데이트 함수
     window.updatePlaceMarkers = function updatePlaceMarkers(markers) {
       // 기존 장소 마커들 제거
@@ -388,7 +426,7 @@
           window._rnlog && _rnlog('[WV] setCenter 완료', { lat: msg.lat, lng: msg.lng });
         }
         
-        // 현재 위치 마커 표시
+        // 현재 위치 마커 표시 (기존 - 호환성 유지)
         if (msg?.type === 'setCurrentLocation') {
           window._rnlog && _rnlog('[WV] setCurrentLocation 메시지 확인', {
             type: msg.type,
@@ -420,6 +458,11 @@
           } else {
             window._rnlog && _rnlog('[WV] setCurrentLocation 조건 실패');
           }
+        }
+
+        // 현위치 마커 업데이트 (지도 중심 이동 없이)
+        if (msg?.type === 'updateCurrentLocation' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          window.updateCurrentLocationMarker(msg.lat, msg.lng);
         }
 
         // 장소 마커들 업데이트
