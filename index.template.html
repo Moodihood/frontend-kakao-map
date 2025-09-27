@@ -440,14 +440,31 @@
     // RN → WV 메시지 핸들러
     window.addEventListener('message', (evt) => {
       try {
-        window._rnlog && _rnlog('[WV] 메시지 받음', evt.data);
+        window._rnlog && _rnlog('[WV] ===== 새 메시지 받음 =====', {
+          rawData: evt.data,
+          dataType: typeof evt.data,
+          dataLength: evt.data ? evt.data.length : 0
+        });
+        
         const msg = JSON.parse(evt.data);
-        window._rnlog && _rnlog('[WV] 파싱된 메시지', msg);
-        window._rnlog && _rnlog('[WV] 메시지 타입 확인', { 
-          type: msg?.type, 
+        window._rnlog && _rnlog('[WV] 파싱된 메시지', {
+          fullMessage: msg,
+          type: msg?.type,
           hasMarkers: !!msg?.markers,
           markerCount: msg?.markers?.length || 0
         });
+        
+        // 특히 updatePlaceMarkersWithAutoZoom 메시지 추적
+        if (msg?.type === 'updatePlaceMarkersWithAutoZoom') {
+          window._rnlog && _rnlog('[WV] 🎯 updatePlaceMarkersWithAutoZoom 메시지 감지됨!', {
+            type: msg.type,
+            markersIsArray: Array.isArray(msg?.markers),
+            markerCount: msg?.markers?.length || 0,
+            bottomSheetHeight: msg.bottomSheetHeight,
+            mapExists: !!window.map,
+            updatePlaceMarkersExists: !!window.updatePlaceMarkers
+          });
+        }
         
         // 장소 위치 변경
         if (msg?.type === 'setCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
@@ -730,7 +747,11 @@
           }
         }
       } catch(e) {
-        window._rnlog && _rnlog('[WV] 메시지 처리 에러', e.message);
+        window._rnlog && _rnlog('[WV] 메시지 처리 에러', {
+          error: e.message,
+          stack: e.stack,
+          rawData: evt.data
+        });
       }
     });
   </script>
