@@ -443,6 +443,11 @@
         window._rnlog && _rnlog('[WV] 메시지 받음', evt.data);
         const msg = JSON.parse(evt.data);
         window._rnlog && _rnlog('[WV] 파싱된 메시지', msg);
+        window._rnlog && _rnlog('[WV] 메시지 타입 확인', { 
+          type: msg?.type, 
+          hasMarkers: !!msg?.markers,
+          markerCount: msg?.markers?.length || 0
+        });
         
         // 장소 위치 변경
         if (msg?.type === 'setCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
