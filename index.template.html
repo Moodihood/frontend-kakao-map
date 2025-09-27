@@ -478,7 +478,7 @@
           window._rnlog && _rnlog('[WV] 지도 중심 이동 완료', { lat: msg.lat, lng: msg.lng });
         }
 
-        // 장소 마커들 업데이트
+        // 장소 마커들 업데이트 (기존 - 호환성 유지)
         if (msg?.type === 'updateMarkers' && msg?.markers) {
           window.updatePlaceMarkers(msg.markers);
           
