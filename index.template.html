@@ -437,11 +437,18 @@
       }
     });
 
-    // RN → WV 메시지 핸들러
+    // RN → WV 메시지 핸들러 - 최대한 단순하게 테스트
     window.addEventListener('message', (evt) => {
-      // 가장 기본적인 메시지 수신 로그
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage('[WV] 메시지 받음!!! evt.data: ' + (evt.data || 'undefined'));
+      // 즉시 확인 메시지 전송 (에러 방지)
+      try {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('[WV] ✅ MESSAGE RECEIVED: ' + (evt.data ? evt.data.substring(0, 100) : 'NO_DATA'));
+        }
+      } catch(e) {
+        // 에러 발생 시에도 알림
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('[WV] ❌ MESSAGE ERROR: ' + e.message);
+        }
       }
       
       try {
