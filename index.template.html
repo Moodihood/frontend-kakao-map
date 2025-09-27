@@ -439,6 +439,11 @@
 
     // RN → WV 메시지 핸들러
     window.addEventListener('message', (evt) => {
+      // 가장 기본적인 메시지 수신 로그
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage('[WV] 메시지 받음!!! evt.data: ' + (evt.data || 'undefined'));
+      }
+      
       try {
         window._rnlog && _rnlog('[WV] ===== 새 메시지 받음 =====', {
           rawData: evt.data,
@@ -464,6 +469,11 @@
             mapExists: !!window.map,
             updatePlaceMarkersExists: !!window.updatePlaceMarkers
           });
+          
+          // 즉시 메시지 수신 확인 전송
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('[WV] 🎯🎯🎯 updatePlaceMarkersWithAutoZoom 메시지 받았음!!! 마커 개수: ' + (msg?.markers?.length || 0));
+          }
         }
         
         // 장소 위치 변경
