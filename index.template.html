@@ -10,7 +10,7 @@
 <body>
   <div id="map"></div>
   <script>
-    // WebView → RN 로그 브릿지
+    // WebView → RN 로그 브릿지 (간소화)
     (function(){
       if (window.ReactNativeWebView) {
         const log = (tag, data) => {
@@ -18,7 +18,7 @@
           catch(e){ window.ReactNativeWebView.postMessage(tag + ': ' + String(data)); }
         };
         window._rnlog = log;
-        log('[WV] origin', { origin: window.location.origin });
+        log('[WV] Map initialized', { origin: window.location.origin });
       }
     })();
 
@@ -41,9 +41,7 @@
 
     window.makeSafeLatLng = function makeSafeLatLng(lat, lng) {
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        // 개발 환경에서는 에뮬레이터 좌표를 서울로 변환하여 표시
         if (!isKorea(lat, lng)) {
-          window._rnlog && _rnlog('[WV] 한국 범위 밖 좌표 -> 서울로 변환', { original: { lat, lng }, converted: { lat: 37.5665, lng: 126.9780 } });
           return new kakao.maps.LatLng(37.5665, 126.9780);
         }
         return new kakao.maps.LatLng(lat, lng);
@@ -259,48 +257,26 @@
           position: position,
           image: markerImage,
           title: '현재 위치',
-          zIndex: 100 // 다른 마커들보다 위에 표시
+          zIndex: 100
         });
         
         window.currentLocationMarker.setMap(window.map);
-        window._rnlog && _rnlog('[WV] 현위치 마커 업데이트 완료', { latitude, longitude });
       }
     }
 
     // 장소 마커들 업데이트 함수
     window.updatePlaceMarkers = function updatePlaceMarkers(markers) {
-      window._rnlog && _rnlog('[WV] updatePlaceMarkers 호출됨', { 
-        markerCount: markers.length,
-        markers: markers.slice(0, 2) // 첫 2개만 로그
-      });
+      window._rnlog && _rnlog('[WV] Updating markers', { count: markers.length });
       
       // 기존 장소 마커들 제거
       window.placeMarkers.forEach(marker => marker.setMap(null));
       window.placeMarkers = [];
-      window._rnlog && _rnlog('[WV] 기존 마커들 제거 완료');
       
       // 새 마커들 생성 및 추가
       markers.forEach((markerData, index) => {
         try {
-          window._rnlog && _rnlog(`[WV] 마커 ${index + 1} 생성 시작`, {
-            id: markerData.id,
-            category: markerData.category,
-            latitude: markerData.latitude,
-            longitude: markerData.longitude,
-            name: markerData.name
-          });
-          
           const position = window.makeSafeLatLng(markerData.latitude, markerData.longitude);
-          window._rnlog && _rnlog(`[WV] 마커 ${index + 1} 위치 생성됨`, {
-            lat: position.getLat(),
-            lng: position.getLng()
-          });
-          
           const markerImage = window.createCategoryMarkerImage(markerData.category, markerData.isSelected);
-          window._rnlog && _rnlog(`[WV] 마커 ${index + 1} 이미지 생성됨`, {
-            category: markerData.category,
-            imageExists: !!markerImage
-          });
           
           const marker = new kakao.maps.Marker({
             position: position,
@@ -309,7 +285,6 @@
           
           // 마커 클릭 이벤트 리스너 추가
           kakao.maps.event.addListener(marker, 'click', function() {
-            window._rnlog && _rnlog('[WV] 마커 클릭됨', { id: markerData.id, name: markerData.name });
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'markerClick',
@@ -320,21 +295,12 @@
           
           marker.setMap(window.map);
           window.placeMarkers.push(marker);
-          
-          window._rnlog && _rnlog(`[WV] 마커 ${index + 1} 지도에 추가 완료`);
         } catch (e) {
-          window._rnlog && _rnlog(`[WV] 마커 ${index + 1} 생성 실패`, {
-            error: e.message,
-            markerData: markerData
-          });
+          window._rnlog && _rnlog(`[WV] Marker ${index + 1} creation failed`, e.message);
         }
       });
       
-      window._rnlog && _rnlog('[WV] 장소 마커들 업데이트 완료', { 
-        totalCount: markers.length,
-        createdCount: window.placeMarkers.length,
-        mapExists: !!window.map
-      });
+      window._rnlog && _rnlog('[WV] Markers updated', { created: window.placeMarkers.length });
     }
 
     // 바텀시트 높이를 고려한 자동 줌 조정 함수
@@ -369,19 +335,28 @@
           }
         }, 100);
         
-        window._rnlog && _rnlog('[WV] 자동 줌 조정 완료', { 
-          bottomSheetHeight, 
-          bottomMargin, 
-          markerCount: window.placeMarkers.length 
-        });
+        window._rnlog && _rnlog('[WV] Auto bounds adjusted', { height: bottomSheetHeight, markers: window.placeMarkers.length });
       } catch (e) {
-        window._rnlog && _rnlog('[WV] 자동 줌 조정 에러', e.message);
+        window._rnlog && _rnlog('[WV] Auto bounds error', e.message);
       }
     }
 
+    // 렌더링 추적을 위한 전역 카운터
+    window.renderCount = {
+      mapInit: 0,
+      centerChanged: 0,
+      tilesLoaded: 0,
+      markerUpdate: 0,
+      boundsAdjust: 0
+    };
+
     kakao.maps.load(function() {
       try {
-        window._rnlog && _rnlog('[WV] kakao.maps.load called', { INIT_LAT, INIT_LNG });
+        window.renderCount.mapInit++;
+        window._rnlog && _rnlog('[WV] Map initializing', { 
+          count: window.renderCount.mapInit,
+          coords: { lat: INIT_LAT, lng: INIT_LNG }
+        });
 
         const mapContainer = document.getElementById('map');
         const center = window.makeSafeLatLng(INIT_LAT, INIT_LNG);
@@ -389,7 +364,7 @@
 
         window.map = new kakao.maps.Map(mapContainer, mapOption);
         
-        // showCenterMarker가 true일 때만 중심점 마커 생성 (파란색)
+        // showCenterMarker가 true일 때만 중심점 마커 생성
         if (SHOW_CENTER_MARKER) {
           const customMarkerImage = window.createCustomMarkerImage(false);
           window.placeMarker = new kakao.maps.Marker({ 
@@ -399,14 +374,13 @@
           window.placeMarker.setMap(window.map);
         }
 
-        window._rnlog && _rnlog('[WV] 지도 및 마커 window 객체에 할당 완료');
-
-        // 지도 중심 좌표 변경 이벤트 리스너 추가
+        // 지도 중심 좌표 변경 이벤트 리스너 (성능 모니터링 포함)
         kakao.maps.event.addListener(window.map, 'center_changed', function() {
+          window.renderCount.centerChanged++;
           const center = window.map.getCenter();
           const lat = center.getLat();
           const lng = center.getLng();
-          window._rnlog && _rnlog('[WV] CENTER_CHANGED', { lat, lng });
+          
           // React Native로 중심 좌표 변경 알림
           if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -417,75 +391,32 @@
           }
         });
 
+        // 타일 로딩 완료 이벤트 (재렌더링 모니터링)
         kakao.maps.event.addListener(window.map, 'tilesloaded', function() {
-          window._rnlog && _rnlog('[WV] TILES_LOADED', true);
+          window.renderCount.tilesLoaded++;
+          window._rnlog && _rnlog('[WV] Tiles loaded', { count: window.renderCount.tilesLoaded });
         });
 
         setTimeout(() => {
           window.map.relayout();
-          window._rnlog && _rnlog('[WV] relayout', true);
         }, 100);
 
-        setTimeout(() => {
-          const tiles = document.querySelectorAll('img');
-          const count = Array.from(tiles).filter(img => /kakao|daum/.test(img.src)).length;
-          window._rnlog && _rnlog('[WV] tile images count', count);
-        }, 5000);
+        window._rnlog && _rnlog('[WV] Map ready', { 
+          initCount: window.renderCount.mapInit
+        });
 
       } catch (e) {
-        window._rnlog && _rnlog('[WV] MAP_INIT_ERROR', { message: e.message, stack: e.stack });
+        window._rnlog && _rnlog('[WV] Map init error', e.message);
       }
     });
 
-    // RN → WV 메시지 핸들러 - 최대한 단순하게 테스트
+    // RN → WV 메시지 핸들러
     window.addEventListener('message', (evt) => {
-      // 즉시 확인 메시지 전송 (에러 방지)
       try {
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage('[WV] ✅ MESSAGE RECEIVED: ' + (evt.data ? evt.data.substring(0, 100) : 'NO_DATA'));
-        }
-      } catch(e) {
-        // 에러 발생 시에도 알림
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage('[WV] ❌ MESSAGE ERROR: ' + e.message);
-        }
-      }
-      
-      try {
-        window._rnlog && _rnlog('[WV] ===== 새 메시지 받음 =====', {
-          rawData: evt.data,
-          dataType: typeof evt.data,
-          dataLength: evt.data ? evt.data.length : 0
-        });
-        
         const msg = JSON.parse(evt.data);
-        window._rnlog && _rnlog('[WV] 파싱된 메시지', {
-          fullMessage: msg,
-          type: msg?.type,
-          hasMarkers: !!msg?.markers,
-          markerCount: msg?.markers?.length || 0
-        });
-        
-        // 특히 updatePlaceMarkersWithAutoZoom 메시지 추적
-        if (msg?.type === 'updatePlaceMarkersWithAutoZoom') {
-          window._rnlog && _rnlog('[WV] 🎯 updatePlaceMarkersWithAutoZoom 메시지 감지됨!', {
-            type: msg.type,
-            markersIsArray: Array.isArray(msg?.markers),
-            markerCount: msg?.markers?.length || 0,
-            bottomSheetHeight: msg.bottomSheetHeight,
-            mapExists: !!window.map,
-            updatePlaceMarkersExists: !!window.updatePlaceMarkers
-          });
-          
-          // 즉시 메시지 수신 확인 전송
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage('[WV] 🎯🎯🎯 updatePlaceMarkersWithAutoZoom 메시지 받았음!!! 마커 개수: ' + (msg?.markers?.length || 0));
-          }
-        }
         
         // 장소 위치 변경
         if (msg?.type === 'setCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
-          window._rnlog && _rnlog('[WV] setCenter 처리 시작');
           const c = window.makeSafeLatLng(msg.lat, msg.lng);
           window.map.setCenter(c);
           
@@ -497,42 +428,23 @@
             image: customMarkerImage
           });
           window.placeMarker.setMap(window.map);
-          
-          window._rnlog && _rnlog('[WV] setCenter 완료', { lat: msg.lat, lng: msg.lng });
         }
         
-        // 현재 위치 마커 표시 (기존 - 호환성 유지)
-        if (msg?.type === 'setCurrentLocation') {
-          window._rnlog && _rnlog('[WV] setCurrentLocation 메시지 확인', {
-            type: msg.type,
-            lat: msg.lat,
-            lng: msg.lng,
-            latFinite: Number.isFinite(msg?.lat),
-            lngFinite: Number.isFinite(msg?.lng),
-            mapExists: !!window.map
-          });
+        // 현재 위치 마커 표시
+        if (msg?.type === 'setCurrentLocation' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
+          const c = window.makeSafeLatLng(msg.lat, msg.lng);
+          window.map.setCenter(c);
           
-          if (Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
-            window._rnlog && _rnlog('[WV] setCurrentLocation 처리 시작');
-            const c = window.makeSafeLatLng(msg.lat, msg.lng);
-            window.map.setCenter(c);
-            
-            // 기존 현재 위치 마커 제거 후 새로 생성 (빨간색)
-            if (window.currentLocationMarker) {
-              window.currentLocationMarker.setMap(null);
-              window._rnlog && _rnlog('[WV] 기존 현위치 마커 제거됨');
-            }
-            const redMarkerImage = window.createCustomMarkerImage(true);
-            window.currentLocationMarker = new kakao.maps.Marker({ 
-              position: c,
-              image: redMarkerImage
-            });
-            window.currentLocationMarker.setMap(window.map);
-            
-            window._rnlog && _rnlog('[WV] setCurrentLocation 완료', { lat: msg.lat, lng: msg.lng });
-          } else {
-            window._rnlog && _rnlog('[WV] setCurrentLocation 조건 실패');
+          // 기존 현재 위치 마커 제거 후 새로 생성
+          if (window.currentLocationMarker) {
+            window.currentLocationMarker.setMap(null);
           }
+          const redMarkerImage = window.createCustomMarkerImage(true);
+          window.currentLocationMarker = new kakao.maps.Marker({ 
+            position: c,
+            image: redMarkerImage
+          });
+          window.currentLocationMarker.setMap(window.map);
         }
 
         // 현위치 마커 업데이트 (지도 중심 이동 없이)
@@ -543,24 +455,24 @@
         // 지도 줌 레벨 설정
         if (msg?.type === 'setZoomLevel' && Number.isFinite(msg?.level) && window.map) {
           window.map.setLevel(msg.level);
-          window._rnlog && _rnlog('[WV] 줌 레벨 설정 완료', { level: msg.level });
         }
 
         // 지도 중심 이동 (애니메이션 포함)
         if (msg?.type === 'panToLocation' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
           const position = window.makeSafeLatLng(msg.lat, msg.lng);
           window.map.panTo(position);
-          window._rnlog && _rnlog('[WV] 지도 중심 이동 완료', { lat: msg.lat, lng: msg.lng });
         }
 
-        // 장소 마커들 업데이트 (기존 - 호환성 유지)
+        // 장소 마커들 업데이트
         if (msg?.type === 'updateMarkers' && msg?.markers) {
+          window.renderCount.markerUpdate++;
           window.updatePlaceMarkers(msg.markers);
           
           // 바텀시트 높이 정보가 있으면 자동 줌 조정 실행
           if (msg.bottomSheetHeight) {
             setTimeout(() => {
               if (window.adjustMapBounds) {
+                window.renderCount.boundsAdjust++;
                 window.adjustMapBounds(msg.bottomSheetHeight);
               }
             }, 500);
@@ -571,20 +483,15 @@
         if (msg?.type === 'adjustBounds' && msg?.bottomSheetHeight) {
           setTimeout(() => {
             if (window.adjustMapBounds) {
+              window.renderCount.boundsAdjust++;
               window.adjustMapBounds(msg.bottomSheetHeight);
             }
           }, 300);
         }
 
-        // 지도 중심 설정 + 선택적 중심 마커 표시 (성능 최적화)
+        // 지도 중심 설정 + 선택적 중심 마커 표시
         if (msg?.type === 'setMapCenterWithMarker' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
           try {
-            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 처리 시작', {
-              lat: msg.lat,
-              lng: msg.lng,
-              showCenterMarker: msg.showCenterMarker
-            });
-
             const c = window.makeSafeLatLng(msg.lat, msg.lng);
             window.map.setCenter(c);
             
@@ -597,27 +504,24 @@
                 image: customMarkerImage
               });
               window.placeMarker.setMap(window.map);
-              window._rnlog && _rnlog('[WV] 중심 마커 생성됨');
             } else {
               // 중심 마커 숨김
               if (window.placeMarker) {
                 window.placeMarker.setMap(null);
-                window._rnlog && _rnlog('[WV] 중심 마커 제거됨');
               }
             }
-            
-            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 완료');
           } catch(e) {
-            window._rnlog && _rnlog('[WV] setMapCenterWithMarker 에러', e.message);
+            window._rnlog && _rnlog('[WV] setMapCenterWithMarker error', e.message);
           }
         }
 
-        // 장소 마커 업데이트 + 자동 줌 조정 (성능 최적화)
+        // 장소 마커 업데이트 + 자동 줌 조정
         if (msg?.type === 'updatePlaceMarkersWithAutoZoom' && Array.isArray(msg?.markers) && window.map) {
           try {
-            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 처리 시작', {
-              markerCount: msg.markers.length,
-              bottomSheetHeight: msg.bottomSheetHeight
+            window.renderCount.markerUpdate++;
+            window._rnlog && _rnlog('[WV] Updating markers with auto zoom', { 
+              count: msg.markers.length,
+              updateCount: window.renderCount.markerUpdate
             });
 
             // 장소 마커 업데이트
@@ -627,31 +531,19 @@
             
             // 마커 업데이트 후 자동 줌 조정 실행
             if (msg.markers.length > 0 && msg.bottomSheetHeight !== undefined) {
-              window._rnlog && _rnlog('[WV] 자동 줌 조정 시도 시작', { 
-                markerCount: msg.markers.length, 
-                bottomSheetHeight: msg.bottomSheetHeight,
-                adjustMapBoundsExists: !!window.adjustMapBounds
-              });
-              
               setTimeout(() => {
                 if (window.adjustMapBounds) {
-                  window._rnlog && _rnlog('[WV] adjustMapBounds 함수 호출 실행');
+                  window.renderCount.boundsAdjust++;
                   window.adjustMapBounds(msg.bottomSheetHeight);
-                } else {
-                  window._rnlog && _rnlog('[WV] adjustMapBounds 함수가 존재하지 않음');
                 }
               }, 500);
-            } else {
-              window._rnlog && _rnlog('[WV] 마커가 없거나 bottomSheetHeight가 없어서 자동 줌 조정 스킵');
             }
-            
-            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 완료');
           } catch(e) {
-            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom 에러', e.message);
+            window._rnlog && _rnlog('[WV] updatePlaceMarkersWithAutoZoom error', e.message);
           }
         }
 
-        // 바텀시트 높이 조정 + 센터 보정 (성능 최적화)
+        // 바텀시트 높이 조정 + 센터 보정
         if (msg?.type === 'adjustBottomSheetWithCenterCorrection' && window.map) {
           try {
             const bottomSheetHeight = msg.bottomSheetHeight;
@@ -659,23 +551,11 @@
             const shouldApplyCenterCorrection = msg.shouldApplyCenterCorrection;
             const markerCount = msg.markerCount || 0;
             
-            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 처리 시작', {
-              current: bottomSheetHeight,
-              previous: previousHeight,
-              shouldApplyCenterCorrection,
-              markerCount
-            });
-            
             const screenHeight = window.innerHeight;
             
-            // 기준 센터 설정 (45% 일 때의 센터) - 45%일 때만
+            // 기준 센터 설정 (45% 일 때의 센터)
             if (Math.abs(bottomSheetHeight - 0.45) < 0.01) {
               window.baseCenter = window.map.getCenter();
-              window._rnlog && _rnlog('[WV] 기준 센터 설정/갱신', {
-                lat: window.baseCenter.getLat(),
-                lng: window.baseCenter.getLng(),
-                bottomSheetHeight: bottomSheetHeight
-              });
             }
             
             // 45% ↔ 최소 높이 간 이동에서만 센터 보정 적용
@@ -683,92 +563,65 @@
               const currentMapCenter = window.map.getCenter();
               
               if (Math.abs(bottomSheetHeight - 0.2) < 0.01) {
-                // 45% → 20%: 지도 높이가 늘어났으므로 현재 센터를 새로운 지도 높이의 가운데로 이동
+                // 45% → 20%: 지도 높이 증가에 따른 센터 보정
                 const mapHeightAt45 = screenHeight * (1 - 0.45);
                 const mapHeightAt20 = screenHeight * (1 - 0.2);
                 const heightIncrease = mapHeightAt20 - mapHeightAt45;
                 const centerOffsetY = heightIncrease * 0.5;
                 
-                window._rnlog && _rnlog('[WV] 45% → 20% 센터 보정 계산', {
-                  mapHeightAt45,
-                  mapHeightAt20,
-                  heightIncrease,
-                  centerOffsetY
-                });
-                
                 const projection = window.map.getProjection();
                 const currentPoint = projection.pointFromCoords(currentMapCenter);
                 const adjustedPoint = { x: currentPoint.x, y: currentPoint.y + centerOffsetY };
                 const newCenter = projection.coordsFromPoint(adjustedPoint);
                 window.map.panTo(newCenter);
                 
-                window._rnlog && _rnlog('[WV] 45% → 20% 센터 보정 적용', {
-                  currentCenter: { lat: currentMapCenter.getLat(), lng: currentMapCenter.getLng() },
-                  newCenter: { lat: newCenter.getLat(), lng: newCenter.getLng() },
-                  centerOffsetY
-                });
-                
               } else if (Math.abs(bottomSheetHeight - 0.45) < 0.01) {
-                // 20% → 45%: 지도 높이가 줄어들었으므로 현재 센터를 새로운 지도 높이의 가운데로 이동
+                // 20% → 45%: 지도 높이 감소에 따른 센터 보정
                 const mapHeightAt20 = screenHeight * (1 - 0.2);
                 const mapHeightAt45 = screenHeight * (1 - 0.45);
                 const heightDecrease = mapHeightAt20 - mapHeightAt45;
                 const centerOffsetY = -heightDecrease * 0.5;
                 
-                window._rnlog && _rnlog('[WV] 20% → 45% 센터 보정 계산', {
-                  mapHeightAt20,
-                  mapHeightAt45,
-                  heightDecrease,
-                  centerOffsetY
-                });
-                
                 const projection = window.map.getProjection();
                 const currentPoint = projection.pointFromCoords(currentMapCenter);
                 const adjustedPoint = { x: currentPoint.x, y: currentPoint.y + centerOffsetY };
                 const newCenter = projection.coordsFromPoint(adjustedPoint);
                 window.map.panTo(newCenter);
-                
-                window._rnlog && _rnlog('[WV] 20% → 45% 센터 보정 적용', {
-                  currentCenter: { lat: currentMapCenter.getLat(), lng: currentMapCenter.getLng() },
-                  newCenter: { lat: newCenter.getLat(), lng: newCenter.getLng() },
-                  centerOffsetY
-                });
               }
-            } else if (!shouldApplyCenterCorrection) {
-              window._rnlog && _rnlog('[WV] 센터 보정 스킵 - 45% ↔ 최소 높이 간 이동이 아님');
             }
             
-            // 장소 마커가 있을 때만 자동 줌 조정 (75% 이상에서는 스킵)
+            // 장소 마커가 있을 때만 자동 줌 조정
             if (window.adjustMapBounds && markerCount > 0 && bottomSheetHeight < 0.75) {
               setTimeout(() => {
+                window.renderCount.boundsAdjust++;
                 window.adjustMapBounds(bottomSheetHeight);
               }, 300);
             }
-            
-            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 완료');
           } catch(e) {
-            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection 에러', e.message);
+            window._rnlog && _rnlog('[WV] adjustBottomSheetWithCenterCorrection error', e.message);
           }
         }
 
-        // 기준 센터 업데이트 (성능 최적화)
+        // 기준 센터 업데이트
         if (msg?.type === 'updateBaseCenter' && Number.isFinite(msg?.lat) && Number.isFinite(msg?.lng) && window.map) {
           try {
             window.baseCenter = new kakao.maps.LatLng(msg.lat, msg.lng);
-            window._rnlog && _rnlog('[WV] 기준 센터 업데이트', {
-              lat: msg.lat,
-              lng: msg.lng
-            });
           } catch(e) {
-            window._rnlog && _rnlog('[WV] updateBaseCenter 에러', e.message);
+            window._rnlog && _rnlog('[WV] updateBaseCenter error', e.message);
           }
         }
+        
+        // 성능 모니터링 정보 출력 (5초마다)
+        if (msg?.type === 'getPerformanceInfo') {
+          window._rnlog && _rnlog('[WV] Performance Info', {
+            renderCount: window.renderCount,
+            totalRenders: Object.values(window.renderCount).reduce((a, b) => a + b, 0),
+            mapExists: !!window.map,
+            markersCount: window.placeMarkers ? window.placeMarkers.length : 0
+          });
+        }
       } catch(e) {
-        window._rnlog && _rnlog('[WV] 메시지 처리 에러', {
-          error: e.message,
-          stack: e.stack,
-          rawData: evt.data
-        });
+        window._rnlog && _rnlog('[WV] Message processing error', e.message);
       }
     });
   </script>
