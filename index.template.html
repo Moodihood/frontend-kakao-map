@@ -373,14 +373,25 @@
         // bounds에 여백 추가하여 setBounds 실행 (여백을 줄여서 더 확대, 상하 균형 조정)
         window.map.setBounds(bounds, bottomMargin + 20, 20, topMargin + 20, 20); // bottom, left, top, right
         
-        // setBounds 후 줌 레벨 확인
+        // setBounds 후 줌 레벨 확인 및 적절한 제한 적용
         setTimeout(() => {
           const currentLevel = window.map.getLevel();
           const center = window.map.getCenter();
-          window._rnlog && _rnlog('[WV] After setBounds', {
-            zoomLevel: currentLevel,
-            center: { lat: center.getLat(), lng: center.getLng() }
-          });
+          
+          // 너무 많이 줌아웃된 경우 적당한 레벨로 제한 (방배-서울역 거리에 맞춤)
+          if (currentLevel > 7) {
+            window.map.setLevel(7);
+            window._rnlog && _rnlog('[WV] 줌 레벨 조정', { 
+              beforeLevel: currentLevel, 
+              afterLevel: 7,
+              reason: '과도한 줌아웃 방지'
+            });
+          } else {
+            window._rnlog && _rnlog('[WV] After setBounds', {
+              zoomLevel: currentLevel,
+              center: { lat: center.getLat(), lng: center.getLng() }
+            });
+          }
         }, 50);
         
         window._rnlog && _rnlog('[WV] Auto bounds adjusted', { height: bottomSheetHeight, markers: window.placeMarkers.length });
