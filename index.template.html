@@ -53,8 +53,8 @@
     window.createCategoryMarkerImage = function createCategoryMarkerImage(category, isSelected = false) {
       let svgContent = '';
       
-      // 카페 카테고리 마커 SVG
-      if (category === '카페' || category.includes('카페') || category.includes('커피')) {
+      // 카페 카테고리 마커 SVG (CE7)
+      if (category === 'CE7') {
         svgContent = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_2414_43289)">
 <g opacity="0.16" filter="url(#filter0_f_2414_43289)">
@@ -88,8 +88,8 @@
 </defs>
 </svg>`;
       }
-      // 음식점 카테고리 마커 SVG
-      else if (category === '음식점' || category.includes('음식') || category.includes('식당')) {
+      // 음식점 카테고리 마커 SVG (FD6)
+      else if (category === 'FD6') {
         svgContent = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_2414_43480)">
 <g opacity="0.16" filter="url(#filter0_f_2414_43480)">
@@ -126,8 +126,8 @@
 </defs>
 </svg>`;
       }
-      // 관광지 카테고리 마커 SVG
-      else if (category === '관광지' || category.includes('관광') || category.includes('명소')) {
+      // 관광지 카테고리 마커 SVG (AT4)
+      else if (category === 'AT4') {
           svgContent = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_3969_62335)">
 <g opacity="0.16" filter="url(#filter0_f_3969_62335)">
@@ -304,7 +304,7 @@
       markers.forEach((markerData, index) => {
         try {
           const position = window.makeSafeLatLng(markerData.latitude, markerData.longitude);
-          const markerImage = window.createCategoryMarkerImage(markerData.category, markerData.isSelected);
+          const markerImage = window.createCategoryMarkerImage(markerData.categoryCode, markerData.isSelected);
           
           const marker = new kakao.maps.Marker({
             position: position,
