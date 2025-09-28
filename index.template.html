@@ -336,10 +336,25 @@
       if (!window.map || window.placeMarkers.length === 0) return;
       
       try {
+        // 마커 좌표들 로그 출력 (디버깅용)
+        const markerPositions = window.placeMarkers.map((marker, index) => {
+          const pos = marker.getPosition();
+          return { index, lat: pos.getLat(), lng: pos.getLng() };
+        });
+        window._rnlog && _rnlog('[WV] Marker positions', markerPositions);
+        
         // 모든 마커의 위치를 포함하는 bounds 계산
         const bounds = new kakao.maps.LatLngBounds();
         window.placeMarkers.forEach(marker => {
           bounds.extend(marker.getPosition());
+        });
+        
+        // bounds 정보 로그 출력
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        window._rnlog && _rnlog('[WV] Calculated bounds', {
+          southwest: { lat: sw.getLat(), lng: sw.getLng() },
+          northeast: { lat: ne.getLat(), lng: ne.getLng() }
         });
         
         // 바텀시트 높이를 고려한 여백 계산 - DOM 요소에서 직접 가져오기
@@ -351,17 +366,22 @@
         // 마커들을 더 중앙에 위치시키기 위해 상단 여백도 추가
         const topMargin = Math.floor(bottomMargin * 0.3); // 바텀 마진의 30% 정도를 상단에도 적용
         
+        window._rnlog && _rnlog('[WV] Margins calculated', {
+          mapHeight, bottomMargin, topMargin, bottomSheetHeight
+        });
+        
         // bounds에 여백 추가하여 setBounds 실행 (여백을 줄여서 더 확대, 상하 균형 조정)
         window.map.setBounds(bounds, bottomMargin + 20, 20, topMargin + 20, 20); // bottom, left, top, right
         
-        // 줌 레벨이 너무 멀어지지 않도록 최대 줌 아웃 제한
+        // setBounds 후 줌 레벨 확인
         setTimeout(() => {
           const currentLevel = window.map.getLevel();
-          if (currentLevel > 6) {
-            window.map.setLevel(6); // 최대 줌 아웃 레벨 제한
-            console.log('[WV] 줌 레벨 제한 적용:', { beforeLevel: currentLevel, afterLevel: 6 });
-          }
-        }, 100);
+          const center = window.map.getCenter();
+          window._rnlog && _rnlog('[WV] After setBounds', {
+            zoomLevel: currentLevel,
+            center: { lat: center.getLat(), lng: center.getLng() }
+          });
+        }, 50);
         
         window._rnlog && _rnlog('[WV] Auto bounds adjusted', { height: bottomSheetHeight, markers: window.placeMarkers.length });
       } catch (e) {
