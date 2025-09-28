@@ -373,24 +373,38 @@
         // bounds에 여백 추가하여 setBounds 실행 (여백을 줄여서 더 확대, 상하 균형 조정)
         window.map.setBounds(bounds, bottomMargin + 20, 20, topMargin + 20, 20); // bottom, left, top, right
         
-        // setBounds 후 줌 레벨 확인 및 적절한 제한 적용
+        // setBounds 후 줌 레벨 확인 및 스마트 조정
         setTimeout(() => {
           const currentLevel = window.map.getLevel();
           const center = window.map.getCenter();
           
-          // 너무 많이 줌아웃된 경우 적당한 레벨로 제한 (방배-서울역 거리에 맞춤)
-          if (currentLevel > 7) {
-            window.map.setLevel(7);
-            window._rnlog && _rnlog('[WV] 줌 레벨 조정', { 
-              beforeLevel: currentLevel, 
-              afterLevel: 7,
-              reason: '과도한 줌아웃 방지'
-            });
-          } else {
-            window._rnlog && _rnlog('[WV] After setBounds', {
-              zoomLevel: currentLevel,
-              center: { lat: center.getLat(), lng: center.getLng() }
-            });
+          window._rnlog && _rnlog('[WV] After setBounds', {
+            zoomLevel: currentLevel,
+            center: { lat: center.getLat(), lng: center.getLng() },
+            markerCount: window.placeMarkers.length
+          });
+          
+          // 마커 개수에 따른 스마트 줌 레벨 제한
+          if (window.placeMarkers.length === 2) {
+            // 2개 마커의 경우: 너무 멀리 줌아웃되지 않도록 제한 (더 관대하게)
+            if (currentLevel > 9) {
+              window.map.setLevel(9);
+              window._rnlog && _rnlog('[WV] 2개 마커 줌 레벨 조정', { 
+                beforeLevel: currentLevel, 
+                afterLevel: 9,
+                reason: '2개 마커 최적화'
+              });
+            }
+          } else if (window.placeMarkers.length > 2) {
+            // 3개 이상의 경우: 좀 더 엄격한 제한
+            if (currentLevel > 8) {
+              window.map.setLevel(8);
+              window._rnlog && _rnlog('[WV] 다중 마커 줌 레벨 조정', { 
+                beforeLevel: currentLevel, 
+                afterLevel: 8,
+                reason: '다중 마커 최적화'
+              });
+            }
           }
         }, 50);
         
