@@ -227,11 +227,9 @@
       return new kakao.maps.MarkerImage(svgUrl, size);
     }
 
-    // 커스텀 마커 이미지 생성 함수 - window 객체에 할당 (현재 위치용)
-    window.createCustomMarkerImage = function createCustomMarkerImage(isCurrentLocation = false) {
-      if (isCurrentLocation) {
-        // 현위치 마커 (20x20 크기의 빨간 원)
-        const svgContent = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    // 현위치 마커 이미지 생성 함수
+    window.createCurrentLocationMarker = function createCurrentLocationMarker() {
+      const svgContent = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g filter="url(#filter0_d_1575_19092)">
 <circle cx="12" cy="10" r="8" fill="#FF4242"/>
 <circle cx="12" cy="10" r="7" stroke="white" stroke-width="2"/>
@@ -245,67 +243,16 @@
 <feComposite in2="hardAlpha" operator="out"/>
 <feColorMatrix type="matrix" values="0 0 0 0 0.0901961 0 0 0 0 0.0901961 0 0 0 0 0.0980392 0 0 0 0.12 0"/>
 <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1575_19092"/>
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2414_43480" result="shape"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1575_19092" result="shape"/>
 </filter>
 </defs>
 </svg>`;
-        const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
-        return new kakao.maps.MarkerImage(svgUrl, new kakao.maps.Size(20, 20));
-      }
-    }
-
-    // 현위치 빨간 마커 이미지 생성 함수
-    window.createCurrentLocationMarker = function createCurrentLocationMarker() {
-      const svgContent = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g filter="url(#filter0_d_current_location)">
-          <circle cx="12" cy="12" r="10" fill="#FF4242"/>
-          <circle cx="12" cy="12" r="8" stroke="white" stroke-width="3"/>
-          <circle cx="12" cy="12" r="4" fill="white"/>
-        </g>
-        <defs>
-          <filter id="filter0_d_current_location" x="0" y="0" width="24" height="26" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-            <feFlood flood-opacity="0" result="BackgroundImageFix"/>
-            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-            <feOffset dy="2"/>
-            <feGaussianBlur stdDeviation="2"/>
-            <feComposite in2="hardAlpha" operator="out"/>
-            <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0"/>
-            <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow"/>
-            <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
-          </filter>
-        </defs>
-      </svg>`;
       
       const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
       const imageSize = new kakao.maps.Size(24, 24);
       const imageOption = {offset: new kakao.maps.Point(12, 12)};
       
       return new kakao.maps.MarkerImage(svgUrl, imageSize, imageOption);
-    }
-
-    // 현위치 마커 업데이트 함수 (지도 중심 이동 없이)
-    window.updateCurrentLocationMarker = function updateCurrentLocationMarker(latitude, longitude) {
-      // 기존 현위치 마커 제거
-      if (window.currentLocationMarker) {
-        window.currentLocationMarker.setMap(null);
-        window.currentLocationMarker = null;
-      }
-      
-      if (latitude && longitude) {
-        const position = window.makeSafeLatLng(latitude, longitude);
-        const markerImage = window.createCurrentLocationMarker();
-        
-        window.currentLocationMarker = new kakao.maps.Marker({
-          position: position,
-          image: markerImage,
-          title: '현재 위치',
-          zIndex: 1000
-        });
-        
-        window.currentLocationMarker.setMap(window.map);
-        
-        window._rnlog && _rnlog('[WV] 현위치 마커 업데이트 (이동 없음)', { lat: latitude, lng: longitude });
-      }
     }
 
     // 장소 마커들 업데이트 함수
