@@ -216,12 +216,18 @@
       const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
       
       // 기본 크기
-      const baseWidth = 40;
-      const baseHeight = 40;
-
+      let baseWidth;
+      let baseHeight;
+      if (category === 'map-marker' || category === 'default-marker') {
+        baseWidth = 60;
+        baseHeight = 60;
+      } else {
+       baseWidth = 50;
+       baseHeight = 50;
+      }
       // 선택된 마커는 2배 크기
-      const finalWidth = isSelected ? baseWidth * 2 : baseWidth;
-      const finalHeight = isSelected ? baseHeight * 2 : baseHeight;
+      const finalWidth = isSelected ? baseWidth * 1.5 : baseWidth;
+      const finalHeight = isSelected ? baseHeight * 1.5 : baseHeight;
       
       const size = new kakao.maps.Size(finalWidth, finalHeight);
       return new kakao.maps.MarkerImage(svgUrl, size);
