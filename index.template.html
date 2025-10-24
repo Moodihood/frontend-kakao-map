@@ -49,24 +49,25 @@
       return new kakao.maps.LatLng(37.5665, 126.9780);
     }
 
-    // 카테고리별 마커 이미지 생성 함수 - window 객체에 할당
+    // 마커 이미지 캐시
+    window.markerImageCache = {};
+
+    // 카테고리별 마커 이미지 생성 함수 - 캐싱 최적화
     window.createCategoryMarkerImage = function createCategoryMarkerImage(category, isSelected = false) {
+      // 캐시 키 생성
+      const cacheKey = `${category}_${isSelected}`;
+      if (window.markerImageCache[cacheKey]) {
+        return window.markerImageCache[cacheKey];
+      }
+
       let svgContent = '';
       
-      // 특별한 경우: map-marker 사용
+      // 특별한 경우: map-marker 사용 (간소화된 SVG)
       if (category === 'map-marker' || category === 'default-marker') {
         svgContent = `<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g opacity="0.16" filter="url(#filter0_f_5713_80256)">
-<ellipse cx="30" cy="53.75" rx="7.5" ry="2.5" fill="#171719"/>
-</g>
-<path d="M30 6.02783C40.1743 6.02783 49.375 13.8171 49.375 25.9028C49.375 29.7162 47.9056 33.9232 44.8896 38.5396C41.8747 43.1545 37.337 48.1436 31.2617 53.5093C30.5481 54.1259 29.4774 54.1257 28.7637 53.5093C22.6758 48.1435 18.1313 43.1535 15.1133 38.5386C12.0945 33.9225 10.625 29.7161 10.625 25.9028C10.625 13.8171 19.8257 6.02783 30 6.02783ZM30 19.7778C26.9048 19.7778 24.375 22.3077 24.375 25.4028C24.375 28.498 26.9048 31.0278 30 31.0278C33.0952 31.0278 35.625 28.498 35.625 25.4028C35.625 22.3077 33.0952 19.7778 30 19.7778Z" fill="#5977D8" stroke="white" stroke-width="1.25"/>
-<defs>
-<filter id="filter0_f_5713_80256" x="20" y="48.75" width="20" height="10" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix"/>
-<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
-<feGaussianBlur stdDeviation="1.25" result="effect1_foregroundBlur_5713_80256"/>
-</filter>
-</defs>
+<circle cx="30" cy="50" r="4" fill="rgba(0,0,0,0.1)"/>
+<path d="M30 8C39 8 46 15 46 24C46 32 30 52 30 52S14 32 14 24C14 15 21 8 30 8Z" fill="#5977D8" stroke="white" stroke-width="2"/>
+<circle cx="30" cy="24" r="6" fill="white"/>
 </svg>`;
       }
       // 카페 카테고리 마커 SVG (CE7)
@@ -216,8 +217,7 @@
       const svgUrl = 'data:image/svg+xml;base64,' + btoa(svgContent);
       
       // 기본 크기
-      let baseWidth;
-      let baseHeight;
+      let baseWidth, baseHeight;
       if (category === 'map-marker' || category === 'default-marker') {
         baseWidth = 60;
         baseHeight = 60;
@@ -225,12 +225,17 @@
        baseWidth = 50;
        baseHeight = 50;
       }
-      // 선택된 마커는 2배 크기
+      
+      // 선택된 마커는 1.5배 크기
       const finalWidth = isSelected ? baseWidth * 1.5 : baseWidth;
       const finalHeight = isSelected ? baseHeight * 1.5 : baseHeight;
       
       const size = new kakao.maps.Size(finalWidth, finalHeight);
-      return new kakao.maps.MarkerImage(svgUrl, size);
+      const markerImage = new kakao.maps.MarkerImage(svgUrl, size);
+      
+      // 캐시에 저장
+      window.markerImageCache[cacheKey] = markerImage;
+      return markerImage;
     }
 
     // 현위치 마커 이미지 생성 함수
