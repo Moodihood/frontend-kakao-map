@@ -10,15 +10,19 @@
 <body>
   <div id="map"></div>
   <script>
-    // WebView → RN 로그 브릿지 (간소화)
+    // WebView → RN 로그 브릿지 (프로덕션 최적화)
     (function(){
-      if (window.ReactNativeWebView) {
+      const DEBUG_MODE = false; // 프로덕션에서 false
+      
+      if (window.ReactNativeWebView && DEBUG_MODE) {
         const log = (tag, data) => {
           try { window.ReactNativeWebView.postMessage(tag + ': ' + JSON.stringify(data)); }
           catch(e){ window.ReactNativeWebView.postMessage(tag + ': ' + String(data)); }
         };
         window._rnlog = log;
         log('[WV] Map initialized', { origin: window.location.origin });
+      } else {
+        window._rnlog = null;
       }
     })();
 
@@ -51,6 +55,10 @@
 
     // 마커 이미지 캐시
     window.markerImageCache = {};
+    
+    // 마커 풀링 시스템
+    window.markerPool = [];
+    window.activeMarkers = new Map(); // kakaoId -> marker 매핑
 
     // 카테고리별 마커 이미지 생성 함수 - 캐싱 최적화
     window.createCategoryMarkerImage = function createCategoryMarkerImage(category, isSelected = false) {
@@ -266,43 +274,75 @@
       return new kakao.maps.MarkerImage(svgUrl, imageSize, imageOption);
     }
 
-    // 장소 마커들 업데이트 함수
+    // 풀에서 마커 가져오기
+    window.getMarkerFromPool = function getMarkerFromPool() {
+      if (window.markerPool.length > 0) {
+        return window.markerPool.pop();
+      }
+      return new kakao.maps.Marker({
+        position: new kakao.maps.LatLng(37.5665, 126.978), // 기본 위치
+        image: null
+      });
+    }
+
+    // 풀에 마커 반환
+    window.returnMarkerToPool = function returnMarkerToPool(marker) {
+      marker.setMap(null);
+      // 이벤트 리스너 정리
+      kakao.maps.event.removeListener(marker, 'click');
+      window.markerPool.push(marker);
+    }
+
+    // 장소 마커들 업데이트 함수 (풀링 최적화)
     window.updatePlaceMarkers = function updatePlaceMarkers(markers) {
-      window._rnlog && _rnlog('[WV] Updating markers', { count: markers.length });
+      const newMarkerIds = new Set(markers.map(m => m.kakaoId));
       
-      // 기존 장소 마커들 제거
-      window.placeMarkers.forEach(marker => marker.setMap(null));
-      window.placeMarkers = [];
+      // 기존 마커 중 불필요한 것들 풀로 반환
+      for (const [kakaoId, marker] of window.activeMarkers) {
+        if (!newMarkerIds.has(kakaoId)) {
+          window.returnMarkerToPool(marker);
+          window.activeMarkers.delete(kakaoId);
+        }
+      }
       
-      // 새 마커들 생성 및 추가
-      markers.forEach((markerData, index) => {
-        try {
-          const position = window.makeSafeLatLng(markerData.latitude, markerData.longitude);
-          const markerImage = window.createCategoryMarkerImage(markerData.categoryCode, markerData.isSelected);
+      // 새 마커들 처리
+      markers.forEach((markerData) => {
+        const kakaoId = markerData.kakaoId;
+        let marker = window.activeMarkers.get(kakaoId);
+        
+        if (!marker) {
+          // 새 마커 생성 (풀에서 가져오기)
+          marker = window.getMarkerFromPool();
+          window.activeMarkers.set(kakaoId, marker);
           
-          const marker = new kakao.maps.Marker({
-            position: position,
-            image: markerImage
-          });
-          
-          // 마커 클릭 이벤트 리스너 추가
+          // 클릭 이벤트 추가
           kakao.maps.event.addListener(marker, 'click', function() {
             if (window.ReactNativeWebView) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'markerClick',
-                markerId: markerData.kakaoId
+                markerId: kakaoId
               }));
             }
           });
-          
-          marker.setMap(window.map);
-          window.placeMarkers.push(marker);
-        } catch (e) {
-          window._rnlog && _rnlog(`[WV] Marker ${index + 1} creation failed`, e.message);
         }
+        
+        // 마커 속성 업데이트
+        const position = window.makeSafeLatLng(markerData.latitude, markerData.longitude);
+        const markerImage = window.createCategoryMarkerImage(markerData.categoryCode, markerData.isSelected);
+        
+        marker.setPosition(position);
+        marker.setImage(markerImage);
+        marker.setMap(window.map);
       });
       
-      window._rnlog && _rnlog('[WV] Markers updated', { created: window.placeMarkers.length });
+      // placeMarkers 배열 업데이트 (호환성 유지)
+      window.placeMarkers = Array.from(window.activeMarkers.values());
+      
+      window._rnlog && _rnlog('[WV] Markers updated (pooled)', { 
+        count: markers.length,
+        poolSize: window.markerPool.length,
+        activeCount: window.activeMarkers.size
+      });
     }
 
     // 바텀시트 높이를 고려한 자동 줌 조정 함수
